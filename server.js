@@ -257,6 +257,5 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'almaqam-full.html'
 
 const PORT = process.env.PORT || 3000;
 initDB().then(() => app.listen(PORT, () => console.log(`Running on ${PORT}`)));
-Done
 
 
