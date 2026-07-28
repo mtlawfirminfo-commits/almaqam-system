@@ -1,0 +1,16 @@
+{
+  "name": "almaqam-system",
+  "version": "2.0.0",
+  "description": "نظام إدارة القضايا والإجراءات - مكتب المقام للمحاماة",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.11.5",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "web-push": "^3.6.7"
+  }
+}
