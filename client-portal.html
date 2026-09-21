@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>بوابة الموكلين — المقام للمحاماة</title>
+<style>
+:root{
+  --navy:#0D1B2A;--navy2:#1A2E45;--gold:#C9A84C;--gold2:#E2C47A;
+  --cream:#F8F5EF;--cream2:#EDE8DF;--white:#fff;
+  --txt:#1A1A2E;--txt2:#4A5568;--txt3:#718096;
+  --green:#2D7D52;--gbg:#EBF7F1;--orange:#C47A1A;
+  --red:#C0392B;--rbg:#FDEDEC;
+  --border:#DDD8CE;--sh:0 2px 12px rgba(13,27,42,0.08);--sh2:0 8px 32px rgba(13,27,42,0.1);
+  --r:12px;--r2:18px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;background:var(--cream);color:var(--txt);}
+.hidden{display:none !important;}
+
+/* ── LOGIN ── */
+#loginPage{min-height:100vh;background:linear-gradient(160deg,var(--navy) 0%,#132840 100%);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;padding:20px;}
+#loginPage::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle at 20% 20%, rgba(201,168,76,.06) 0%, transparent 40%), radial-gradient(circle at 80% 80%, rgba(201,168,76,.06) 0%, transparent 40%);}
+.login-box{background:var(--white);border-radius:var(--r2);padding:44px 40px;width:420px;max-width:100%;box-shadow:var(--sh2);position:relative;z-index:1;}
+.login-logo{text-align:center;margin-bottom:28px;}
+.login-logo .scale{font-size:36px;margin-bottom:8px;}
+.login-logo h1{font-size:22px;font-weight:700;color:var(--navy);}
+.login-logo p{font-size:10px;color:var(--txt3);margin-top:4px;letter-spacing:1px;}
+.login-divider{width:46px;height:2px;background:var(--gold);margin:16px auto 0;}
+.login-portal-label{text-align:center;font-size:12px;color:var(--gold);font-weight:600;margin-top:12px;letter-spacing:.5px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12px;color:var(--txt2);margin-bottom:6px;font-weight:600;}
+.field input{width:100%;padding:12px 15px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;background:var(--cream);font-family:inherit;}
+.login-btn{width:100%;padding:13px;background:var(--navy);color:var(--gold2);border:none;border-radius:9px;font-size:15px;font-weight:700;cursor:pointer;margin-top:6px;}
+.login-btn:disabled{opacity:.6;}
+.login-err{background:var(--rbg);color:var(--red);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px;display:none;}
+.login-forgot{text-align:center;margin-top:18px;font-size:12px;color:var(--txt3);}
+
+/* ── PORTAL ── */
+#portalPage{min-height:100vh;}
+.hero{background:linear-gradient(135deg,var(--navy) 0%,#16304a 100%);color:var(--white);padding:38px 20px 50px;text-align:center;position:relative;}
+.hero .scale{font-size:30px;margin-bottom:6px;}
+.hero .office{font-size:13px;color:var(--gold2);letter-spacing:1px;margin-bottom:18px;}
+.hero .welcome{font-size:20px;font-weight:700;}
+.hero .welcome span{color:var(--gold2);}
+.hero .sub{font-size:12px;color:rgba(255,255,255,.65);margin-top:6px;}
+.logout-btn{position:absolute;top:16px;left:16px;background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11px;cursor:pointer;}
+.back-btn{position:absolute;top:16px;right:16px;background:rgba(255,255,255,.1);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11px;cursor:pointer;}
+
+.wrap{max-width:640px;margin:-30px auto 0;padding:0 20px 60px;}
+.section-title{font-size:13px;color:var(--txt3);margin-bottom:16px;letter-spacing:.5px;}
+
+.case-tile{background:var(--white);border-radius:var(--r2);padding:20px 22px;box-shadow:var(--sh2);margin-bottom:14px;cursor:pointer;display:flex;align-items:center;gap:16px;}
+.case-tile .num-badge{width:48px;height:48px;border-radius:50%;background:var(--cream2);display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;}
+.case-tile .info{flex:1;min-width:0;}
+.case-tile .num{font-size:15px;font-weight:700;color:var(--navy);}
+.case-tile .court{font-size:12px;color:var(--txt3);margin-top:3px;}
+.case-tile .meta-row{display:flex;gap:8px;align-items:center;margin-top:9px;flex-wrap:wrap;}
+.pill{font-size:10px;font-weight:700;padding:4px 11px;border-radius:20px;}
+.pill.active{background:var(--gbg);color:var(--green);}
+.pill.next{background:#FEF5E7;color:var(--orange);}
+.pill.ended{background:var(--cream2);color:var(--txt3);}
+.chevron{font-size:17px;color:var(--txt3);flex-shrink:0;}
+
+.case-card{background:var(--white);border-radius:var(--r2);padding:26px;box-shadow:var(--sh2);margin-bottom:22px;}
+.case-num-label{font-size:11px;color:var(--txt3);letter-spacing:1px;margin-bottom:4px;}
+.case-title{font-size:19px;font-weight:700;color:var(--navy);}
+.case-meta{display:flex;gap:20px;margin-top:16px;padding-top:16px;border-top:1px solid var(--cream2);flex-wrap:wrap;}
+.case-meta .item{flex:1;min-width:110px;}
+.case-meta .label{font-size:11px;color:var(--txt3);margin-bottom:3px;}
+.case-meta .value{font-size:13px;font-weight:600;color:var(--txt);}
+.status-pill{display:inline-block;background:var(--gbg);color:var(--green);font-size:12px;font-weight:700;padding:5px 13px;border-radius:20px;margin-top:12px;}
+.status-pill.ended{background:var(--cream2);color:var(--txt3);}
+
+.next-session{background:linear-gradient(135deg,var(--gold) 0%,var(--gold2) 100%);border-radius:var(--r2);padding:20px 24px;margin-bottom:26px;display:flex;align-items:center;gap:16px;box-shadow:var(--sh);}
+.next-session .icon{font-size:28px;}
+.next-session .label{font-size:11px;color:var(--navy);opacity:.75;font-weight:600;}
+.next-session .date{font-size:17px;font-weight:700;color:var(--navy);}
+.next-session .countdown{font-size:12px;color:var(--navy);opacity:.85;margin-top:2px;font-weight:600;}
+
+.timeline{position:relative;padding-right:26px;}
+.timeline::before{content:'';position:absolute;right:7px;top:6px;bottom:6px;width:2px;background:var(--border);}
+.tl-item{position:relative;padding-bottom:22px;}
+.tl-item:last-child{padding-bottom:0;}
+.tl-dot{position:absolute;right:-22px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--white);border:3px solid var(--gold);}
+.tl-item.past .tl-dot{border-color:var(--txt3);background:var(--cream2);}
+.tl-card{background:var(--white);border-radius:var(--r);padding:14px 18px;box-shadow:var(--sh);}
+.tl-date{font-size:11px;color:var(--txt3);font-weight:600;margin-bottom:5px;}
+.tl-decision{font-size:13px;font-weight:700;color:var(--navy);}
+
+.empty-state{text-align:center;padding:40px 20px;color:var(--txt3);font-size:13px;}
+.footer{text-align:center;margin-top:36px;padding-top:22px;border-top:1px solid var(--cream2);color:var(--txt3);font-size:12px;line-height:2;}
+.footer .office-name{color:var(--navy);font-weight:700;font-size:13px;}
+</style>
+</head>
+<body>
+
+<div id="loginPage">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="scale">⚖️</div>
+      <h1>المقام للمحاماة</h1>
+      <p>AL MAQAM LAW FIRM — SINCE 1995</p>
+      <div class="login-divider"></div>
+      <div class="login-portal-label">بوابة الموكلين</div>
+    </div>
+    <div class="login-err" id="loginErr"></div>
+    <div class="field">
+      <label>اسم المستخدم</label>
+      <input type="text" id="loginUsername" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>الرقم السري</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" onkeydown="if(event.key==='Enter')doClientLogin()">
+    </div>
+    <button class="login-btn" id="loginBtn" onclick="doClientLogin()">دخول</button>
+    <div class="login-forgot">نسيت رقمك السري؟ تواصل مع المكتب</div>
+  </div>
+</div>
+
+<div id="portalPage" class="hidden">
+  <div class="hero">
+    <button class="logout-btn" onclick="doClientLogout()">خروج</button>
+    <button class="back-btn hidden" id="backToListBtn" onclick="showCasesListView()">→ قضاياي</button>
+    <div class="scale">⚖️</div>
+    <div class="office">المقام للمحاماة</div>
+    <div class="welcome">أهلاً بك، <span id="portalClientName"></span></div>
+    <div class="sub" id="portalSub"></div>
+  </div>
+  <div class="wrap">
+    <div id="casesListView"></div>
+    <div id="caseDetailView" class="hidden"></div>
+    <div class="footer">
+      <div class="office-name">المقام للمحاماة</div>
+      الكويت
+    </div>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let clientToken = localStorage.getItem('client_token');
+let myCases = [];
+
+function getClientToken(){ return localStorage.getItem('client_token'); }
+
+async function api(method, url, body=null){
+  const opts = { method, headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+getClientToken() } };
+  if(body) opts.body = JSON.stringify(body);
+  const r = await fetch(API+url, opts);
+  const data = await r.json();
+  if(r.status === 401){ doClientLogout(); throw new Error('auth'); }
+  return data;
+}
+
+function fd(d){ if(!d) return '—'; return new Date(d+'T00:00:00').toLocaleDateString('ar-KW',{year:'numeric',month:'long',day:'numeric'}); }
+
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const target = new Date(dateStr+'T00:00:00');
+  return Math.round((target-today)/86400000);
+}
+
+function countdownLabel(dateStr){
+  const days = daysUntil(dateStr);
+  if(days === null) return '';
+  if(days < 0) return '';
+  if(days === 0) return 'اليوم';
+  if(days === 1) return 'غداً';
+  return 'بعد ' + days + ' يوم';
+}
+
+async function doClientLogin(){
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginErr');
+  errEl.style.display = 'none';
+  if(!username || !password){ errEl.textContent='اكتب اسم المستخدم والرقم السري'; errEl.style.display='block'; return; }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'جاري الدخول...';
+  try{
+    const r = await fetch(API+'/api/auth/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await r.json();
+    if(data.error){ errEl.textContent = data.error; errEl.style.display='block'; return; }
+    if(data.user.role !== 'client'){ errEl.textContent = 'هذي البوابة خاصة بالموكلين فقط'; errEl.style.display='block'; return; }
+    localStorage.setItem('client_token', data.token);
+    localStorage.setItem('client_name', data.user.full_name);
+    clientToken = data.token;
+    initPortal();
+  }catch(e){
+    errEl.textContent = 'تعذر الاتصال بالسيرفر'; errEl.style.display='block';
+  }finally{
+    btn.disabled = false; btn.textContent = 'دخول';
+  }
+}
+
+function doClientLogout(){
+  localStorage.removeItem('client_token');
+  localStorage.removeItem('client_name');
+  clientToken = null;
+  document.getElementById('portalPage').classList.add('hidden');
+  document.getElementById('loginPage').classList.remove('hidden');
+}
+
+async function initPortal(){
+  document.getElementById('loginPage').classList.add('hidden');
+  document.getElementById('portalPage').classList.remove('hidden');
+  document.getElementById('portalClientName').textContent = localStorage.getItem('client_name') || '';
+  try{
+    const data = await api('GET','/api/client-portal/cases');
+    myCases = Array.isArray(data) ? data : [];
+  }catch(e){ myCases = []; }
+
+  if(myCases.length === 0){
+    document.getElementById('portalSub').textContent = 'ما فيه قضايا مسجّلة على حسابك حالياً';
+    document.getElementById('casesListView').innerHTML = '<div class="empty-state">لا توجد قضايا مرتبطة بحسابك بعد. تواصل مع المكتب لو تحتاج مساعدة.</div>';
+    return;
+  }
+
+  if(myCases.length === 1){
+    openCaseDetailView(myCases[0].id);
+  } else {
+    document.getElementById('portalSub').textContent = `لديك ${myCases.length} قضايا مسجّلة — اختر أي وحدة لمتابعتها`;
+    showCasesListView();
+  }
+}
+
+function statusPillHtml(status){
+  const ended = status === 'منتهية' || status === 'مغلقة';
+  if(ended) return '<span class="pill ended">⚫ منتهية</span>';
+  return '<span class="pill active">🟢 جارية</span>';
+}
+
+function showCasesListView(){
+  document.getElementById('caseDetailView').classList.add('hidden');
+  document.getElementById('casesListView').classList.remove('hidden');
+  document.getElementById('backToListBtn').classList.add('hidden');
+  const nextDate = c => c.postpone_date || c.session_date;
+  document.getElementById('casesListView').innerHTML = `
+    <div class="section-title">قضاياي</div>
+    ${myCases.map(c=>`
+      <div class="case-tile" onclick="openCaseDetailView(${c.id})">
+        <div class="num-badge">⚖️</div>
+        <div class="info">
+          <div class="num">${c.case_number}</div>
+          <div class="court">${c.court||''}${c.chamber?(' — '+c.chamber):''}</div>
+          <div class="meta-row">
+            ${statusPillHtml(c.status)}
+            ${nextDate(c)?`<span class="pill next">📅 القادمة: ${fd(nextDate(c))}</span>`:''}
+          </div>
+        </div>
+        <div class="chevron">‹</div>
+      </div>
+    `).join('')}
+  `;
+}
+
+async function openCaseDetailView(caseId){
+  const c = myCases.find(x=>x.id===caseId);
+  if(!c) return;
+  document.getElementById('casesListView').classList.add('hidden');
+  document.getElementById('caseDetailView').classList.remove('hidden');
+  if(myCases.length > 1) document.getElementById('backToListBtn').classList.remove('hidden');
+  document.getElementById('portalSub').textContent = 'بوابة متابعة القضايا';
+
+  const nextDate = c.postpone_date || c.session_date;
+  const ended = c.status === 'منتهية' || c.status === 'مغلقة';
+  const cd = countdownLabel(nextDate);
+
+  let html = `
+    <div class="case-card">
+      <div class="case-num-label">رقم القضية الآلي</div>
+      <div class="case-title">${c.case_number}</div>
+      <div class="status-pill ${ended?'ended':''}">${ended?'⚫ منتهية':'🟢 جارية — بانتظار الجلسة القادمة'}</div>
+      <div class="case-meta">
+        <div class="item"><div class="label">المحكمة</div><div class="value">${c.court||'—'}</div></div>
+        <div class="item"><div class="label">نوع القضية</div><div class="value">${c.case_type||'—'}</div></div>
+      </div>
+    </div>`;
+
+  if(nextDate && !ended){
+    html += `
+      <div class="next-session">
+        <div class="icon">📅</div>
+        <div>
+          <div class="label">الجلسة القادمة</div>
+          <div class="date">${fd(nextDate)}</div>
+          ${cd?`<div class="countdown">${cd}</div>`:''}
+        </div>
+      </div>`;
+  }
+
+  html += `<div class="section-title">مسار القضية</div><div id="timelineBox"><div class="empty-state">⏳ جاري التحميل...</div></div>`;
+  document.getElementById('caseDetailView').innerHTML = html;
+
+  try{
+    const sessions = await api('GET','/api/client-portal/cases/'+caseId+'/timeline');
+    const list = Array.isArray(sessions) ? sessions : [];
+    const tlBox = document.getElementById('timelineBox');
+    if(list.length === 0){
+      tlBox.innerHTML = '<div class="empty-state">ما فيه سجل جلسات مسجّل بعد</div>';
+      return;
+    }
+    tlBox.innerHTML = `<div class="timeline">${list.map((s,i)=>`
+      <div class="tl-item ${i>0?'past':''}">
+        <div class="tl-dot"></div>
+        <div class="tl-card">
+          <div class="tl-date">${fd(s.session_date)}</div>
+          <div class="tl-decision">${s.decision || 'قيد النظر'}</div>
+        </div>
+      </div>
+    `).join('')}</div>`;
+  }catch(e){
+    document.getElementById('timelineBox').innerHTML = '<div class="empty-state">تعذر تحميل السجل</div>';
+  }
+}
+
+(function init(){
+  if(clientToken) initPortal();
+})();
+</script>
+</body>
+</html>
