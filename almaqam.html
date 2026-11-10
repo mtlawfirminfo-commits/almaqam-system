@@ -2859,22 +2859,33 @@ async function updateClientUsername(userId, caseId){
   const input = document.getElementById('newClientUsername-'+caseId);
   const username = input.value.trim();
   if(!username){ toast('اكتب اسم مستخدم جديد',true); return; }
+  const cs = cases.find(x=>x.id===caseId);
+  const phone = ((cs && cs.phone)||'').replace(/\D/g,'');
+  // نفتح نافذة واتساب فوراً (قبل انتظار السيرفر) حتى لا يحجبها المتصفح
+  const w = phone ? window.open('about:blank','_blank') : null;
   try{
     const data = await api('PUT','/api/client-accounts/'+userId+'/username',{username});
-    if(data.error){ toast('⚠️ '+data.error,true); return; }
+    if(data.error){ if(w) w.close(); toast('⚠️ '+data.error,true); return; }
     toast('✅ تم تحديث اسم المستخدم');
+    sendClientCredentialsWA(phone, username, null, true, w);
     await refreshCaseAfterSessionChange();
-  }catch(e){ if(e.message!=='auth') toast('⚠️ خطأ',true); }
+  }catch(e){ if(w) w.close(); if(e.message!=='auth') toast('⚠️ خطأ',true); }
 }
-
-function sendClientCredentialsWA(phone, username, pin){
+function sendClientCredentialsWA(phone, username, pin, renamed, win){
   const officeName = (officeSettings.office_name && officeSettings.office_name.value) || 'المقام للمحاماة';
   const portalUrl = 'https://almaqamlawfirm.com/'; // الدخول للموكلين من موقع المكتب
-  let msg = `مرحباً،\n\nتم إنشاء حسابك ببوابة متابعة القضايا الخاصة بـ${officeName}.\n\n🔑 بيانات الدخول:\nاسم المستخدم: ${username}\n`;
-  if(pin) msg += `الرقم السري: ${pin}\n`;
-  else msg += `(استخدم نفس رقمك السري الحالي)\n`;
+  let msg = renamed
+    ? `مرحباً،\n\nتم تحديث اسم المستخدم لحسابك ببوابة متابعة القضايا الخاصة بـ${officeName}.\n\n🔑 بيانات الدخول:\nاسم المستخدم الجديد: ${username}\n(الرقم السري كما هو بدون تغيير)\n`
+    : `مرحباً،\n\nتم إنشاء حسابك ببوابة متابعة القضايا الخاصة بـ${officeName}.\n\n🔑 بيانات الدخول:\nاسم المستخدم: ${username}\n`;
+  if(!renamed){
+    if(pin) msg += `الرقم السري: ${pin}\n`;
+    else msg += `(استخدم نفس رقمك السري الحالي)\n`;
+  }
   msg += `\n🔗 رابط الدخول:\n${portalUrl}\n\nنتشرف بخدمتكم`;
-  if(phone) window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(msg),'_blank');
+  if(phone){
+    const url = 'https://wa.me/'+phone+'?text='+encodeURIComponent(msg);
+    if(win && !win.closed) win.location.href = url; else window.open(url,'_blank');
+  }
   else { navigator.clipboard.writeText(msg); toast('📋 ما فيه رقم هاتف مسجّل — تم نسخ الرسالة'); }
 }
 
