@@ -244,6 +244,12 @@ async function initDB() {
     "ALTER TABLE cases ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL",
     "ALTER TABLE cases ADD COLUMN IF NOT EXISTS client_name_original TEXT",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL",
+    `CREATE TABLE IF NOT EXISTS fee_contracts (id SERIAL PRIMARY KEY, client_id INTEGER NOT NULL REFERENCES clients(id), title TEXT, total_fee NUMERIC(14,3) NOT NULL DEFAULT 0, collection_pct NUMERIC(5,2) NOT NULL DEFAULT 0, contract_date DATE, notes TEXT, created_by INTEGER, created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW())`,
+    `CREATE TABLE IF NOT EXISTS fee_contract_cases (contract_id INTEGER NOT NULL REFERENCES fee_contracts(id) ON DELETE CASCADE, case_id INTEGER NOT NULL REFERENCES cases(id) ON DELETE CASCADE, PRIMARY KEY (contract_id, case_id))`,
+    `CREATE TABLE IF NOT EXISTS fee_installments (id SERIAL PRIMARY KEY, contract_id INTEGER NOT NULL REFERENCES fee_contracts(id) ON DELETE CASCADE, seq INTEGER NOT NULL DEFAULT 1, label TEXT, amount NUMERIC(14,3) NOT NULL, due_date DATE)`,
+    `CREATE TABLE IF NOT EXISTS fee_payments (id SERIAL PRIMARY KEY, contract_id INTEGER NOT NULL REFERENCES fee_contracts(id) ON DELETE CASCADE, amount NUMERIC(14,3) NOT NULL, paid_date DATE NOT NULL, note TEXT, created_by INTEGER, created_at TIMESTAMP DEFAULT NOW())`,
+    `CREATE TABLE IF NOT EXISTS fee_collections (id SERIAL PRIMARY KEY, contract_id INTEGER NOT NULL REFERENCES fee_contracts(id) ON DELETE CASCADE, amount NUMERIC(14,3) NOT NULL, collected_date DATE NOT NULL, note TEXT)`,
+    "CREATE INDEX IF NOT EXISTS fee_contracts_client_idx ON fee_contracts(client_id)",
     "CREATE INDEX IF NOT EXISTS cases_client_idx ON cases(client_id)",
     "ALTER TABLE cases ADD COLUMN IF NOT EXISTS court_number TEXT",
     "ALTER TABLE cases ADD COLUMN IF NOT EXISTS police_number TEXT", 
@@ -2527,6 +2533,213 @@ app.post('/api/client-accounts/shorten-usernames', auth, adminOnly, async (req, 
     }
     res.json({ changed: out });
   } catch (err) { console.error(err); res.status(500).json({ error: 'تعذر التحديث' }); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// الأتعاب (النظام الجديد): عقد أتعاب لكل موكل يغطي قضية أو أكثر
+// ═══════════════════════════════════════════════════════════
+function calcFee(c) {
+  // c: {total_fee, collection_pct, installments[], payments[], collections[]}  — كل الحساب بالفلس (أعداد صحيحة)
+  const today = localToday();
+  const totalFee = fils(c.total_fee);
+  const pct = Number(c.collection_pct) || 0;
+  const collected = c.collections.reduce((s, x) => s + fils(x.amount), 0);
+  const pctFee = Math.round(collected * pct / 100);
+  const dueTotal = totalFee + pctFee;
+  const paid = c.payments.reduce((s, x) => s + fils(x.amount), 0);
+  const remaining = Math.max(dueTotal - paid, 0);
+  const overpaid = Math.max(paid - dueTotal, 0);
+  const insts = [...c.installments].sort((a, b) => ((a.due_date || '9999') < (b.due_date || '9999') ? -1 : (a.due_date || '9999') > (b.due_date || '9999') ? 1 : a.seq - b.seq));
+  let left = paid;
+  const schedule = insts.map(i => {
+    const amt = fils(i.amount), applied = Math.min(amt, left); left -= applied;
+    const unpaid = amt - applied;
+    const status = unpaid === 0 ? 'paid' : (i.due_date && i.due_date < today ? 'overdue' : 'upcoming');
+    return { id: i.id, seq: i.seq, label: i.label, amount: kd(amt), due_date: i.due_date, paid_amount: kd(applied), unpaid: kd(unpaid), status };
+  });
+  const instTotal = insts.reduce((s, i) => s + fils(i.amount), 0);
+  const pctUnpaid = Math.max(pctFee - left, 0); // ما بقي من نسبة التحصيل بعد توزيع المدفوع على الدفعات
+  const dueNow = schedule.filter(s => s.status === 'overdue').reduce((s, x) => s + fils(x.unpaid), 0) + pctUnpaid;
+  const next = schedule.find(s => s.status === 'upcoming');
+  const complete = dueTotal > 0 && paid >= dueTotal;
+  const waitingCollection = totalFee === 0 && pct > 0 && collected === 0;
+  return {
+    total_fee: kd(totalFee), collection_pct: pct, collected: kd(collected), pct_fee: kd(pctFee), pct_unpaid: kd(pctUnpaid),
+    due_total: kd(dueTotal), paid: kd(paid), remaining: kd(remaining), overpaid: kd(overpaid),
+    unscheduled: kd(Math.max(totalFee - instTotal, 0)),
+    due_now: kd(dueNow), late: dueNow > 0, complete, waiting_collection: waitingCollection,
+    next_due: next ? { label: next.label, amount: next.unpaid, due_date: next.due_date } : null,
+    schedule
+  };
+}
+async function loadFeeContracts(whereSql, params) {
+  const rows = (await pool.query(
+    `SELECT f.id, f.client_id, f.title, f.total_fee, f.collection_pct, to_char(f.contract_date,'YYYY-MM-DD') AS contract_date, f.notes,
+            cl.name AS client_name, cl.phone AS client_phone, cl.parent_id,
+            (SELECT p.name FROM clients p WHERE p.id = cl.parent_id) AS parent_name
+     FROM fee_contracts f JOIN clients cl ON cl.id = f.client_id ${whereSql || ''} ORDER BY f.created_at DESC, f.id DESC`, params || [])).rows;
+  if (!rows.length) return [];
+  const ids = rows.map(r => r.id);
+  const [cs, is, ps, os] = await Promise.all([
+    pool.query(`SELECT fc.contract_id, c.id, c.case_number, c.case_type, c.status, c.opponent_name, c.client_id, c.client_name
+                FROM fee_contract_cases fc JOIN cases c ON c.id = fc.case_id WHERE fc.contract_id = ANY($1) ORDER BY c.case_number`, [ids]),
+    pool.query(`SELECT id, contract_id, seq, label, amount, to_char(due_date,'YYYY-MM-DD') AS due_date FROM fee_installments WHERE contract_id = ANY($1) ORDER BY seq, id`, [ids]),
+    pool.query(`SELECT id, contract_id, amount, to_char(paid_date,'YYYY-MM-DD') AS paid_date, note FROM fee_payments WHERE contract_id = ANY($1) ORDER BY paid_date, id`, [ids]),
+    pool.query(`SELECT id, contract_id, amount, to_char(collected_date,'YYYY-MM-DD') AS collected_date, note FROM fee_collections WHERE contract_id = ANY($1) ORDER BY collected_date, id`, [ids])
+  ]);
+  return rows.map(r => {
+    const installments = is.rows.filter(x => x.contract_id === r.id);
+    const payments = ps.rows.filter(x => x.contract_id === r.id).map(x => ({ id: x.id, amount: Number(x.amount), paid_date: x.paid_date, note: x.note }));
+    const collections = os.rows.filter(x => x.contract_id === r.id).map(x => ({ id: x.id, amount: Number(x.amount), collected_date: x.collected_date, note: x.note }));
+    const calc = calcFee({ total_fee: r.total_fee, collection_pct: r.collection_pct, installments, payments, collections });
+    return { id: r.id, client_id: r.client_id, client_name: r.client_name, client_phone: r.client_phone, parent_id: r.parent_id, parent_name: r.parent_name,
+      title: r.title, contract_date: r.contract_date, notes: r.notes,
+      cases: cs.rows.filter(x => x.contract_id === r.id).map(({ contract_id, ...x }) => x), payments, collections, ...calc };
+  });
+}
+function feeSlim(c) { const { notes, ...x } = c; return x; }
+
+// يُنظَّف مدخل العقد؛ يرجع {err} أو القيم الجاهزة
+async function parseFeeBody(b) {
+  const clientId = parseInt(b.client_id) || 0;
+  const cl = (await pool.query('SELECT id, name, parent_id FROM clients WHERE id=$1', [clientId])).rows[0];
+  if (!cl) return { err: 'اختر الموكل' };
+  const total = money(b.total_fee === '' || b.total_fee == null ? 0 : b.total_fee);
+  if (total === null || total < 0) return { err: 'إجمالي الأتعاب غير صحيح' };
+  const pct = b.collection_pct === '' || b.collection_pct == null ? 0 : Number(b.collection_pct);
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) return { err: 'نسبة التحصيل لازم بين 0 و100' };
+  if (total === 0 && pct === 0) return { err: 'حدد إجمالي الأتعاب أو نسبة التحصيل' };
+  const caseIds = [...new Set((b.case_ids || []).map(x => parseInt(x)).filter(Boolean))];
+  if (!caseIds.length) return { err: 'اختر قضية واحدة على الأقل' };
+  const okc = (await pool.query(
+    `SELECT id FROM cases WHERE id = ANY($1) AND client_id IN (SELECT id FROM clients WHERE id=$2 OR parent_id=$2)`, [caseIds, clientId])).rows.length;
+  if (okc !== caseIds.length) return { err: 'كل القضايا لازم تكون من قضايا هذا الموكل (أو شركاته التابعة)' };
+  const insts = [];
+  let sum = 0;
+  for (const [i, x] of (b.installments || []).entries()) {
+    const amt = money(x.amount);
+    if (amt === null || amt <= 0) return { err: `مبلغ الدفعة رقم ${i + 1} غير صحيح` };
+    const d = x.due_date ? String(x.due_date).slice(0, 10) : null;
+    if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return { err: `تاريخ الدفعة رقم ${i + 1} غير صحيح` };
+    sum += fils(amt);
+    insts.push({ label: String(x.label || '').trim().slice(0, 60) || `دفعة ${i + 1}`, amount: amt, due_date: d });
+  }
+  if (sum > fils(total)) return { err: 'مجموع الدفعات أكبر من إجمالي الأتعاب' };
+  const cd = b.contract_date ? String(b.contract_date).slice(0, 10) : localToday();
+  const title = String(b.title || '').trim().slice(0, 150) || `عقد أتعاب — ${cl.name}`;
+  return { clientId, total, pct, caseIds, insts, cd, title, notes: String(b.notes || '').trim().slice(0, 2000) || null, clientName: cl.name };
+}
+async function saveFeeInner(db, id, v, userId) {
+  await db.query('UPDATE fee_contracts SET client_id=$1,title=$2,total_fee=$3,collection_pct=$4,contract_date=$5,notes=$6,updated_at=NOW() WHERE id=$7',
+    [v.clientId, v.title, v.total, v.pct, v.cd, v.notes, id]);
+  await db.query('DELETE FROM fee_contract_cases WHERE contract_id=$1', [id]);
+  for (const cid of v.caseIds) await db.query('INSERT INTO fee_contract_cases (contract_id, case_id) VALUES ($1,$2)', [id, cid]);
+  await db.query('DELETE FROM fee_installments WHERE contract_id=$1', [id]);
+  for (const [i, x] of v.insts.entries()) await db.query('INSERT INTO fee_installments (contract_id,seq,label,amount,due_date) VALUES ($1,$2,$3,$4,$5)', [id, i + 1, x.label, x.amount, x.due_date]);
+}
+
+app.get('/api/fees/contracts', auth, adminOnly, async (req, res) => {
+  try {
+    const cid = parseInt(req.query.client_id) || 0;
+    const list = cid
+      ? await loadFeeContracts('WHERE f.client_id=$1 OR cl.parent_id=$1', [cid])
+      : await loadFeeContracts();
+    res.json(list);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر تحميل العقود' }); }
+});
+app.get('/api/fees/contracts/:id', auth, adminOnly, async (req, res) => {
+  try {
+    const c = (await loadFeeContracts('WHERE f.id=$1', [parseInt(req.params.id) || 0]))[0];
+    if (!c) return res.status(404).json({ error: 'العقد غير موجود' });
+    res.json(c);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر التحميل' }); }
+});
+app.post('/api/fees/contracts', auth, adminOnly, async (req, res) => {
+  try {
+    const v = await parseFeeBody(req.body || {});
+    if (v.err) return res.status(400).json({ error: v.err });
+    const r = await pool.query('INSERT INTO fee_contracts (client_id,title,total_fee,collection_pct,contract_date,notes,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+      [v.clientId, v.title, v.total, v.pct, v.cd, v.notes, req.user.id]);
+    await saveFeeInner(pool, r.rows[0].id, v, req.user.id);
+    await logAudit(req.user, 'إنشاء عقد أتعاب', 'موكل', v.clientId, v.title);
+    res.status(201).json({ id: r.rows[0].id });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر الحفظ' }); }
+});
+app.put('/api/fees/contracts/:id', auth, adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id) || 0;
+    if (!(await pool.query('SELECT 1 FROM fee_contracts WHERE id=$1', [id])).rows[0]) return res.status(404).json({ error: 'العقد غير موجود' });
+    const v = await parseFeeBody(req.body || {});
+    if (v.err) return res.status(400).json({ error: v.err });
+    await saveFeeInner(pool, id, v, req.user.id);
+    await logAudit(req.user, 'تعديل عقد أتعاب', 'موكل', v.clientId, v.title);
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر الحفظ' }); }
+});
+app.delete('/api/fees/contracts/:id', auth, adminOnly, async (req, res) => {
+  try {
+    const c = (await pool.query('SELECT client_id,title FROM fee_contracts WHERE id=$1', [parseInt(req.params.id) || 0])).rows[0];
+    if (!c) return res.status(404).json({ error: 'العقد غير موجود' });
+    await pool.query('DELETE FROM fee_contracts WHERE id=$1', [req.params.id]);
+    await logAudit(req.user, 'حذف عقد أتعاب', 'موكل', c.client_id, c.title);
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر الحذف' }); }
+});
+app.post('/api/fees/contracts/:id/payments', auth, adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id) || 0;
+    const c = (await pool.query('SELECT client_id,title FROM fee_contracts WHERE id=$1', [id])).rows[0];
+    if (!c) return res.status(404).json({ error: 'العقد غير موجود' });
+    const amt = money(req.body.amount);
+    if (amt === null || amt <= 0) return res.status(400).json({ error: 'المبلغ غير صحيح' });
+    const d = req.body.paid_date ? String(req.body.paid_date).slice(0, 10) : localToday();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return res.status(400).json({ error: 'التاريخ غير صحيح' });
+    await pool.query('INSERT INTO fee_payments (contract_id,amount,paid_date,note,created_by) VALUES ($1,$2,$3,$4,$5)', [id, amt, d, String(req.body.note || '').trim().slice(0, 200) || null, req.user.id]);
+    await logAudit(req.user, 'تسجيل دفعة أتعاب', 'موكل', c.client_id, `${c.title} — ${amt}`);
+    res.status(201).json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر التسجيل' }); }
+});
+app.delete('/api/fees/payments/:id', auth, adminOnly, async (req, res) => {
+  try {
+    const r = await pool.query('DELETE FROM fee_payments WHERE id=$1 RETURNING contract_id, amount', [parseInt(req.params.id) || 0]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'الدفعة غير موجودة' });
+    const c = (await pool.query('SELECT client_id,title FROM fee_contracts WHERE id=$1', [r.rows[0].contract_id])).rows[0];
+    if (c) await logAudit(req.user, 'حذف دفعة أتعاب', 'موكل', c.client_id, `${c.title} — ${r.rows[0].amount}`);
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر الحذف' }); }
+});
+app.post('/api/fees/contracts/:id/collections', auth, adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id) || 0;
+    if (!(await pool.query('SELECT 1 FROM fee_contracts WHERE id=$1', [id])).rows[0]) return res.status(404).json({ error: 'العقد غير موجود' });
+    const amt = money(req.body.amount);
+    if (amt === null || amt <= 0) return res.status(400).json({ error: 'المبلغ غير صحيح' });
+    const d = req.body.collected_date ? String(req.body.collected_date).slice(0, 10) : localToday();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return res.status(400).json({ error: 'التاريخ غير صحيح' });
+    await pool.query('INSERT INTO fee_collections (contract_id,amount,collected_date,note) VALUES ($1,$2,$3,$4)', [id, amt, d, String(req.body.note || '').trim().slice(0, 200) || null]);
+    res.status(201).json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر التسجيل' }); }
+});
+app.delete('/api/fees/collections/:id', auth, adminOnly, async (req, res) => {
+  try { await pool.query('DELETE FROM fee_collections WHERE id=$1', [parseInt(req.params.id) || 0]); res.json({ ok: true }); }
+  catch (e) { console.error(e); res.status(500).json({ error: 'تعذر الحذف' }); }
+});
+// تنبيهات: عقود فيها دفعة متأخرة
+app.get('/api/fees/alerts', auth, adminOnly, async (req, res) => {
+  try {
+    const all = await loadFeeContracts();
+    res.json(all.filter(c => c.late).map(c => ({ id: c.id, client_id: c.client_id, client_name: c.client_name, title: c.title, due_now: c.due_now,
+      oldest: (c.schedule.find(s => s.status === 'overdue') || {}).due_date || null })));
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر التحميل' }); }
+});
+// عقود الموكل الظاهرة لحساب البوابة (نفس منطق ظهور القضايا)
+app.get('/api/client-portal/fees', auth, async (req, res) => {
+  try {
+    const list = await loadFeeContracts(
+      `WHERE f.client_id IN (SELECT id FROM clients WHERE id = (SELECT client_id FROM users WHERE id=$1) OR parent_id = (SELECT client_id FROM users WHERE id=$1))
+          OR EXISTS (SELECT 1 FROM cases c WHERE c.client_user_id=$1 AND c.id IN (SELECT case_id FROM fee_contract_cases WHERE contract_id=f.id))`, [req.user.id]);
+    res.json(list.map(c => { const { client_phone, notes, parent_id, parent_name, ...x } = c; return x; }));
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر تحميل الأتعاب' }); }
 });
 
 // ── Client-facing data (role='client' only reaches these, enforced in auth()) ──

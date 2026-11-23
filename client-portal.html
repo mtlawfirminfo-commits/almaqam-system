@@ -228,39 +228,38 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;'
 async function loadPortalFinance(){
   const box = document.getElementById('financeBox');
   box.innerHTML = '';
-  let accs = [];
-  try{ const d = await api('GET','/api/client-portal/finance'); accs = Array.isArray(d) ? d : []; }catch(e){ return; }
-  if(!accs.length) return;
-  box.innerHTML = '<div class="section-title">المستحقات المالية</div>' + accs.map(a=>{
-    const late = a.installments.filter(i=>i.overdue);
-    const upcoming = a.installments.filter(i=>!i.paid && !i.overdue && i.due_date);
+  let list = [];
+  try{ const d = await api('GET','/api/client-portal/fees'); list = Array.isArray(d) ? d : []; }catch(e){ return; }
+  if(!list.length) return;
+  box.innerHTML = '<div class="section-title">الأتعاب والمستحقات</div>' + list.map(c=>{
+    const cases = c.cases.map(x=>esc(x.case_number)).join('، ');
     let head, big, badge;
-    if(a.pending_collection){
-      head = 'اتفاق الأتعاب'; big = `<span class="fin-big">نسبة ${a.percentage}% من المبلغ المحصّل</span>`;
+    if(c.complete){
+      head = 'حالة الأتعاب'; big = '✅ اكتمل السداد';
+      badge = '<span class="fin-badge ok">شكراً لكم</span>';
+    } else if(c.waiting_collection){
+      head = 'اتفاق الأتعاب'; big = `<span class="fin-big">نسبة ${c.collection_pct}% من المبلغ المحصّل</span>`;
       badge = '<span class="fin-badge warn">⏳ تُحسب الأتعاب عند تحصيل المبلغ</span>';
-    } else if(a.fully_paid){
-      head = 'حالة الأتعاب'; big = '✅ مسددة بالكامل';
-      badge = `<span class="fin-badge ok">شكراً لكم${a.last_paid_date?' — آخر دفعة '+fd(a.last_paid_date):''}</span>`;
-    } else if(a.due_now>0){
-      head = 'المبلغ المستحق عليكم الآن'; big = `<span class="fin-big owe">${money(a.due_now)}</span>`;
-      badge = `<span class="fin-badge late">🔔 دفعة حلّ موعدها${late.length===1?' — '+fd(late[0].due_date):''}</span>`;
+    } else if(c.late){
+      head = 'المبلغ المستحق عليكم الآن'; big = `<span class="fin-big owe">${money(c.due_now)}</span>`;
+      badge = '<span class="fin-badge late">🔔 دفعة حلّ موعدها</span>';
     } else {
-      head = 'المتبقي من الأتعاب'; big = `<span class="fin-big">${money(a.remaining)}</span>`;
-      badge = upcoming.length ? `<span class="fin-badge warn">📅 الدفعة القادمة: ${money(upcoming[0].amount)} بتاريخ ${fd(upcoming[0].due_date)}</span>` : '';
+      head = 'المتبقي من الأتعاب'; big = `<span class="fin-big">${money(c.remaining)}</span>`;
+      badge = c.next_due ? `<span class="fin-badge warn">📅 الدفعة القادمة: ${money(c.next_due.amount)} بتاريخ ${fd(c.next_due.due_date)}</span>` : '';
     }
-    return `<div class="fin-card ${a.fully_paid?'paid':''}">
-      <div class="fin-head">${a.case_number?'قضية رقم '+esc(a.case_number)+' — ':''}${head}</div>
-      <div class="${a.fully_paid?'fin-big':''}">${big}</div>
-      ${badge}
-      ${(!a.fully_paid && a.due_now>0) ? `<div style="font-size:12px;color:var(--txt3);margin-top:8px;">إجمالي المتبقي من الأتعاب: <strong>${money(a.remaining)}</strong></div>` : ''}
+    const unpaid = c.schedule.filter(s=>s.status!=='paid');
+    return `<div class="fin-card ${c.complete?'paid':''}">
+      <div class="fin-head">${c.cases.length>1?'القضايا ':'القضية '}${cases} — ${head}</div>
+      <div>${big}</div>${badge}
+      ${(!c.complete && c.late) ? `<div style="font-size:12px;color:var(--txt3);margin-top:8px;">إجمالي المتبقي من الأتعاب: <strong>${money(c.remaining)}</strong></div>` : ''}
       <div class="fin-grid">
-        <div><div class="l">إجمالي المستحق للمكتب</div><div class="v">${a.pending_collection?'—':money(a.total_due)}</div></div>
-        <div><div class="l">المدفوع</div><div class="v" style="color:var(--green);">${money(a.paid)}</div></div>
-        <div><div class="l">المتبقي</div><div class="v">${a.pending_collection?'—':(a.remaining>0?money(a.remaining):'0.000 د.ك')}</div></div>
+        <div><div class="l">إجمالي المستحق للمكتب</div><div class="v">${c.waiting_collection?'—':money(c.due_total)}</div></div>
+        <div><div class="l">المدفوع</div><div class="v" style="color:var(--green);">${money(c.paid)}</div></div>
+        <div><div class="l">المتبقي</div><div class="v">${c.waiting_collection?'—':money(c.remaining)}</div></div>
       </div>
-      ${a.percentage>0?`<div style="font-size:11px;color:var(--txt3);margin-top:10px;">تشمل نسبة ${a.percentage}% من المبلغ المحصّل بمقدار ${money(a.pct_fee)}</div>`:''}
-      ${a.installments.filter(i=>!i.paid).length ? `<div class="fin-sub">📅 الدفعات المستحقة</div>`+a.installments.filter(i=>!i.paid).map(i=>`<div class="fin-row"><span>${i.label?esc(i.label)+' — ':''}${i.due_date?fd(i.due_date):'بدون موعد محدد'}${i.overdue?' <strong style="color:var(--red);">(متأخرة)</strong>':''}</span><strong>${money(i.amount)}</strong></div>`).join('') : ''}
-      ${a.payments.length ? `<div class="fin-sub">💵 الدفعات المسددة</div>`+a.payments.map(p=>`<div class="fin-row"><span>${fd(p.paid_date)}${p.kind?' — '+esc(p.kind):''}</span><strong style="color:var(--green);">${money(p.amount)}</strong></div>`).join('') : ''}
+      ${c.collection_pct>0?`<div style="font-size:11px;color:var(--txt3);margin-top:10px;">تشمل نسبة ${c.collection_pct}% من المبلغ المحصّل (${money(c.collected)}) بمقدار ${money(c.pct_fee)}</div>`:''}
+      ${unpaid.length ? `<div class="fin-sub">📅 الدفعات المستحقة</div>`+unpaid.map(s=>`<div class="fin-row"><span>${esc(s.label)}${s.due_date?' — '+fd(s.due_date):''}${s.status==='overdue'?' <b style="color:#c0392b;">(متأخرة)</b>':''}</span><b>${money(s.unpaid)}</b></div>`).join('') : ''}
+      ${c.payments.length ? `<div class="fin-sub">💵 الدفعات المسددة</div>`+c.payments.map(p=>`<div class="fin-row"><span>${fd(p.paid_date)}</span><b>${money(p.amount)}</b></div>`).join('') : ''}
     </div>`;
   }).join('');
 }

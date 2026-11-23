@@ -479,8 +479,8 @@ tr.st-done{border-right-color:var(--txt3) !important;opacity:.7;}
     <div class="nav-item" onclick="showView('decisions',this)">
       <span class="ic">📋</span><span class="lb">القرارات</span>
     </div>
-    <div class="nav-item" onclick="showView('finance',this)">
-      <span class="ic">💰</span><span class="lb">الحسابات المالية</span>
+    <div class="nav-item" onclick="showView('fees',this)">
+      <span class="ic">💰</span><span class="lb">الأتعاب</span>
       <span class="nav-badge red" id="nbFinance" style="display:none">0</span>
     </div>
     <div class="nav-sec">التواصل</div>
@@ -683,6 +683,24 @@ tr.st-done{border-right-color:var(--txt3) !important;opacity:.7;}
     </div>
 
     <!-- FINANCE (المدير فقط) -->
+    <div id="v-fees" class="view">
+      <div id="feeAlertBox"></div>
+      <div class="stats-grid" id="feeStats"></div>
+      <div class="filters">
+        <div class="search-box"><span>🔍</span><input placeholder="ابحث باسم الموكل أو رقم القضية..." oninput="feeSearch=this.value;feeRender()" autocomplete="off"></div>
+        <select class="filter-select" onchange="feeFilter=this.value;feeRender()">
+          <option value="">كل العقود</option>
+          <option value="late">فيها دفعة متأخرة</option>
+          <option value="open">عليها متبقي</option>
+          <option value="done">مكتملة السداد</option>
+          <option value="wait">بانتظار تحصيل (نسبة)</option>
+        </select>
+        <button class="btn btn-gold" onclick="feeOpenForm()">➕ عقد أتعاب جديد</button>
+      </div>
+      <div class="card"><div class="table-wrap"><table>
+        <thead><tr><th>الموكل</th><th>القضايا</th><th>الإجمالي</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th></tr></thead>
+        <tbody id="feeBody"></tbody></table></div></div>
+    </div>
     <div id="v-finance" class="view">
       <div id="finAlerts"></div>
       <div class="stats-grid" id="finStats"></div>
@@ -738,6 +756,10 @@ tr.st-done{border-right-color:var(--txt3) !important;opacity:.7;}
         <div class="card" style="margin-bottom:16px;">
           <div class="card-header"><div class="card-title" id="crmDCasesTitle">القضايا</div></div>
           <div class="table-wrap"><table><thead><tr><th>رقم القضية</th><th>النوع</th><th>الخصم</th><th>المحكمة</th><th>الحالة</th></tr></thead><tbody id="crmDCases"></tbody></table></div>
+        </div>
+        <div class="card" id="crmFeesCard" style="margin-bottom:16px;display:none;">
+          <div class="card-header"><div class="card-title">💰 عقود الأتعاب</div></div>
+          <div style="padding:14px 20px;" id="crmFeesBody"></div>
         </div>
         <div class="card crm-edit-only" id="crmPortalCard" style="margin-bottom:16px;display:none;">
           <div class="card-header"><div class="card-title">🔐 حساب بوابة الموكل</div></div>
@@ -1648,6 +1670,46 @@ tr.st-done{border-right-color:var(--txt3) !important;opacity:.7;}
 </div>
 
 <!-- ═══ CRM: CLIENT FORM MODAL ═══ -->
+<div class="modal-overlay" id="feeFormModal">
+  <div class="modal" style="max-width:760px;">
+    <div class="modal-header"><div class="modal-title" id="feeFormTitle">💰 عقد أتعاب جديد</div><button class="modal-close" onclick="closeModal('feeFormModal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="full"><label class="f-label">الموكل *</label><select class="f-select" id="feeClient" onchange="feeClientChanged()"></select></div>
+        <div class="full"><label class="f-label">القضايا التي يشملها العقد *</label><div id="feeCases" style="max-height:170px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;"></div></div>
+        <div><label class="f-label">إجمالي الأتعاب (د.ك)</label><input class="f-input" id="feeTotal" inputmode="decimal" dir="ltr" oninput="feeInstSummary()" placeholder="مثال: 3000"></div>
+        <div><label class="f-label">نسبة التحصيل % (اختياري)</label><input class="f-input" id="feePct" inputmode="decimal" dir="ltr" placeholder="مثال: 10"></div>
+        <div><label class="f-label">تاريخ العقد</label><input type="date" class="f-input" id="feeDate"></div>
+        <div><label class="f-label">عنوان (اختياري)</label><input class="f-input" id="feeTitleIn" placeholder="يُملأ تلقائياً"></div>
+        <div class="full" style="background:#f7f5ef;border-radius:10px;padding:10px 12px;">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;">📅 جدول الدفعات</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;font-size:12px;">
+            <div><div>المقدم %</div><input class="f-input" id="feeGenAdv" value="50" dir="ltr" style="width:70px;"></div>
+            <div><div>عدد الدفعات الباقية</div><input class="f-input" id="feeGenN" value="2" dir="ltr" style="width:70px;"></div>
+            <div><div>تاريخ المقدم</div><input type="date" class="f-input" id="feeGenDate"></div>
+            <button class="btn btn-outline btn-sm" onclick="feeGenerate()">⚙️ توليد تلقائي</button>
+            <button class="btn btn-outline btn-sm" onclick="feeGenOne()">دفعة واحدة</button>
+          </div>
+          <div style="font-size:11px;color:var(--txt3);margin:6px 0;">التوليد: المقدم ثم الباقي مقسوم بالتساوي على دفعات شهرية. تقدر تعدّل أي رقم أو تاريخ بعدها.</div>
+          <div id="feeInstRows"></div>
+          <button class="btn btn-outline btn-sm" onclick="feeAddInst()">➕ دفعة</button>
+          <div id="feeInstSum" style="font-size:12px;margin-top:8px;"></div>
+        </div>
+        <div class="full"><label class="f-label">ملاحظات</label><textarea class="f-textarea" id="feeNotes" style="min-height:50px;"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('feeFormModal')">إلغاء</button>
+      <button class="btn btn-gold" id="feeSaveBtn" onclick="feeSave()">💾 حفظ العقد</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="feeDetailModal">
+  <div class="modal" style="max-width:820px;">
+    <div class="modal-header"><div class="modal-title" id="feeDTitle">عقد أتعاب</div><button class="modal-close" onclick="closeModal('feeDetailModal')">✕</button></div>
+    <div class="modal-body" id="feeDBody"></div>
+  </div>
+</div>
 <div class="modal-overlay" id="crmFormModal">
   <div class="modal" style="max-width:560px;">
     <div class="modal-header"><div class="modal-title" id="crmFormTitle">👤 موكل جديد</div><button class="modal-close" onclick="closeModal('crmFormModal')">✕</button></div>
@@ -3045,6 +3107,7 @@ async function updateClientUsername(userId, caseId){
   }catch(e){ if(w) w.close(); if(e.message!=='auth') toast('⚠️ خطأ',true); }
 }
 function sendClientCredentialsWA(phone, username, pin, renamed, win){
+  phone = waPhone(phone);
   const officeName = (officeSettings.office_name && officeSettings.office_name.value) || 'المقام للمحاماة';
   const portalUrl = 'https://almaqamlawfirm.com/'; // الدخول للموكلين من موقع المكتب
   let msg = renamed
@@ -5282,15 +5345,16 @@ function finBadge(st, extra){
 
 async function loadFinAlerts(){
   if(currentUser.role!=='admin') return;
-  try{
-    const data = await api('GET','/api/finance/alerts');
-    finAlerts = Array.isArray(data) ? data : [];
-  }catch(e){ finAlerts = []; }
+  let al = [];
+  try{ const d = await api('GET','/api/fees/alerts'); al = Array.isArray(d) ? d : []; }catch(e){}
   const nb = document.getElementById('nbFinance');
-  if(nb){ nb.textContent = finAlerts.length; nb.style.display = finAlerts.length ? '' : 'none'; }
-  const html = renderFinAlertBox(true);
-  const dash = document.getElementById('finDashAlert'); if(dash) dash.innerHTML = html;
-  const page = document.getElementById('finAlerts'); if(page) page.innerHTML = renderFinAlertBox(false);
+  if(nb){ nb.textContent = al.length; nb.style.display = al.length ? '' : 'none'; }
+  const box = (compact)=> !al.length ? '' : `<div class="card" style="margin-bottom:14px;border-right:4px solid var(--red);padding:12px 16px;">
+    <div style="font-weight:700;font-size:13px;color:var(--red);cursor:pointer;" onclick="showView('fees',null)">🔔 أتعاب متأخرة: ${al.length} عقد</div>
+    ${(compact?al.slice(0,4):al).map(x=>`<div style="font-size:12px;padding:3px 0;cursor:pointer;" onclick="showView('fees',null);setTimeout(()=>feeOpen(${x.id}),300)">${esc(x.client_name)} — <strong>${money(x.due_now)}</strong>${x.oldest?' (منذ '+fd(x.oldest)+')':''}</div>`).join('')}
+    ${compact&&al.length>4?`<div style="font-size:11px;color:var(--txt3);">+ ${al.length-4} أخرى…</div>`:''}</div>`;
+  const dash = document.getElementById('finDashAlert'); if(dash) dash.innerHTML = box(true);
+  const page = document.getElementById('feeAlertBox'); if(page) page.innerHTML = box(false);
 }
 
 function renderFinAlertBox(compact){
@@ -5945,10 +6009,255 @@ async function crmOpen(id){
         <button class="btn btn-outline btn-sm" onclick="crmOpen(${s.id})">فتح صفحتها</button></div>
         <div class="table-wrap"><table><thead><tr><th>رقم القضية</th><th>النوع</th><th>الخصم</th><th>المحكمة</th><th>الحالة</th></tr></thead><tbody>${crmCaseRows(sc)}</tbody></table></div></div>`;
     }).join('') : '';
-    crmRenderPortal(d);
-    document.querySelectorAll('.crm-edit-only:not(#crmPortalCard)').forEach(b=>b.style.display = crmCanEdit() ? '' : 'none');
+    crmRenderPortal(d); crmRenderFees(d);
+    document.querySelectorAll('.crm-edit-only:not(#crmPortalCard):not(#crmFeesCard)').forEach(b=>b.style.display = crmCanEdit() ? '' : 'none');
   }catch(e){ if(e.message!=='auth') toast('⚠️ خطأ',true); }
 }
+// ═══════ الأتعاب (النظام الجديد) ═══════
+let feeAll = [], feeSearch = '', feeFilter = '', feeCur = null, feeEditId = null, feeInst = [], feeFormCases = [];
+function waPhone(p){
+  let d = String(p||'').replace(/[٠-٩]/g,x=>'٠١٢٣٤٥٦٧٨٩'.indexOf(x)).replace(/\D/g,'');
+  if(d.startsWith('00')) d = d.slice(2);
+  if(d.length===8) d = '965'+d; // رقم كويتي محلي
+  return d;
+}
+function feeToday(){ const d=new Date(Date.now()+3*3600e3); return d.toISOString().slice(0,10); }
+function feeAddMonths(ds,n){ const [y,m,d]=ds.split('-').map(Number); const t=new Date(Date.UTC(y,m-1+n,1)); const last=new Date(Date.UTC(t.getUTCFullYear(),t.getUTCMonth()+1,0)).getUTCDate(); t.setUTCDate(Math.min(d,last)); return t.toISOString().slice(0,10); }
+function feeStatus(c){
+  if(c.complete) return '<span class="badge b-ended" style="background:#e6f6ea;color:#1b7a3a;">✅ اكتمل السداد</span>';
+  if(c.late) return '<span class="badge" style="background:#fdecea;color:#c0392b;">🔔 متأخر '+money(c.due_now)+'</span>';
+  if(c.waiting_collection) return '<span class="badge" style="background:#fff4e0;color:#b36b00;">⏳ بانتظار تحصيل</span>';
+  if(c.next_due) return '<span class="badge" style="background:#eef3fb;color:#1a56b0;">📅 القادمة '+fd(c.next_due.due_date)+'</span>';
+  return '<span class="badge">—</span>';
+}
+async function feesLoad(){
+  try{
+    const d = await api('GET','/api/fees/contracts');
+    feeAll = Array.isArray(d) ? d : [];
+    feeRender(); loadFinAlerts();
+  }catch(e){ if(e.message!=='auth') toast('⚠️ تعذّر تحميل الأتعاب',true); }
+}
+function feeRender(){
+  const q = (feeSearch||'').trim().toLowerCase();
+  const list = feeAll.filter(c=>{
+    const ms = !q || c.client_name.toLowerCase().includes(q) || c.cases.some(x=>(x.case_number||'').toLowerCase().includes(q));
+    const mf = !feeFilter || (feeFilter==='late'&&c.late) || (feeFilter==='open'&&c.remaining>0) || (feeFilter==='done'&&c.complete) || (feeFilter==='wait'&&c.waiting_collection);
+    return ms && mf;
+  });
+  const sum = k=>feeAll.reduce((s,c)=>s+Math.round(c[k]*1000),0)/1000;
+  document.getElementById('feeStats').innerHTML = [
+    ['gold','عدد العقود',feeAll.length],['','إجمالي المستحق',money(sum('due_total'))],['','المدفوع',money(sum('paid'))],
+    ['','المتبقي',money(sum('remaining'))],['','عقود متأخرة',feeAll.filter(c=>c.late).length]
+  ].map(([cl,l,v])=>`<div class="stat-card ${cl}" style="cursor:default;"><div style="font-size:12px;color:var(--txt3);">${l}</div><div style="font-size:20px;font-weight:800;">${v}</div></div>`).join('');
+  document.getElementById('feeBody').innerHTML = list.length ? list.map(c=>`<tr style="cursor:pointer;" onclick="feeOpen(${c.id})">
+    <td><strong>${esc(c.client_name)}</strong>${c.parent_name?`<div style="font-size:10px;color:var(--txt3);">تابعة لـ ${esc(c.parent_name)}</div>`:''}</td>
+    <td style="font-size:12px;">${c.cases.length>2?c.cases.slice(0,2).map(x=>esc(x.case_number)).join('، ')+' +'+(c.cases.length-2):c.cases.map(x=>esc(x.case_number)).join('، ')}</td>
+    <td>${c.waiting_collection?'نسبة '+c.collection_pct+'%':money(c.due_total)}</td><td style="color:var(--green);">${money(c.paid)}</td>
+    <td><strong>${money(c.remaining)}</strong></td><td>${feeStatus(c)}</td></tr>`).join('')
+    : '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--txt3);">لا توجد عقود. اضغط «عقد أتعاب جديد» للبدء.</td></tr>';
+}
+// ── نافذة العقد ──
+async function feeOpen(id){
+  try{
+    const c = await api('GET','/api/fees/contracts/'+id);
+    if(c.error){ toast('⚠️ '+c.error,true); return; }
+    feeCur = c; feeRenderDetail(); openModal('feeDetailModal');
+  }catch(e){ if(e.message!=='auth') toast('⚠️ خطأ',true); }
+}
+function feeRenderDetail(){
+  const c = feeCur;
+  document.getElementById('feeDTitle').textContent = '💰 '+c.client_name;
+  let banner;
+  if(c.complete) banner = '<div style="background:#e6f6ea;color:#1b7a3a;border-radius:10px;padding:12px;font-weight:800;text-align:center;font-size:16px;">✅ اكتمل السداد'+(c.overpaid>0?' — زيادة مدفوعة '+money(c.overpaid):'')+'</div>';
+  else if(c.late) banner = `<div style="background:#fdecea;color:#c0392b;border-radius:10px;padding:12px;font-weight:700;text-align:center;">🔔 يوجد مبلغ متأخر: ${money(c.due_now)}</div>`;
+  else if(c.waiting_collection) banner = '<div style="background:#fff4e0;color:#b36b00;border-radius:10px;padding:12px;font-weight:700;text-align:center;">⏳ الأتعاب نسبة '+c.collection_pct+'% من المبلغ المحصّل — سجّل المبلغ عند التحصيل</div>';
+  else banner = c.next_due ? `<div style="background:#eef3fb;color:#1a56b0;border-radius:10px;padding:12px;font-weight:700;text-align:center;">📅 الدفعة القادمة: ${money(c.next_due.amount)} بتاريخ ${fd(c.next_due.due_date)}</div>` : '';
+  const box = (l,v,col)=>`<div style="flex:1;min-width:120px;background:#faf8f3;border-radius:10px;padding:10px;text-align:center;"><div style="font-size:11px;color:var(--txt3);">${l}</div><div style="font-size:17px;font-weight:800;${col?'color:'+col:''}">${v}</div></div>`;
+  const stLbl = {paid:'<span style="color:#1b7a3a;">✅ مسددة</span>',overdue:'<span style="color:#c0392b;font-weight:700;">🔔 متأخرة</span>',upcoming:'<span style="color:#1a56b0;">📅 قادمة</span>'};
+  let h = banner + `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0;">${box('إجمالي المستحق',money(c.due_total))}${box('المدفوع',money(c.paid),'var(--green)')}${box('المتبقي',money(c.remaining),c.remaining>0?'#c0392b':'#1b7a3a')}</div>`;
+  h += `<div style="font-size:12px;color:var(--txt3);margin-bottom:6px;">⚖️ القضايا: ${c.cases.map(x=>`<a href="#" onclick="closeModal('feeDetailModal');openCaseDetail(${x.id});return false;" style="color:var(--navy);font-weight:700;">${esc(x.case_number)}</a>${x.client_id!==c.client_id?' <span style="font-size:10px;">('+esc(x.client_name)+')</span>':''}`).join('، ')}</div>`;
+  if(c.contract_date) h += `<div style="font-size:12px;color:var(--txt3);">تاريخ العقد: ${fd(c.contract_date)}${c.total_fee>0?' — أتعاب ثابتة '+money(c.total_fee):''}</div>`;
+  if(c.collection_pct>0){
+    h += `<div class="fin-sub" style="margin-top:14px;font-weight:700;">📈 نسبة التحصيل ${c.collection_pct}% — المحصّل ${money(c.collected)} ← الأتعاب ${money(c.pct_fee)}</div>`
+      + c.collections.map(x=>`<div style="display:flex;gap:8px;align-items:center;font-size:13px;padding:4px 0;"><span>${fd(x.collected_date)}</span><strong>${money(x.amount)}</strong><span style="color:var(--txt3);flex:1;">${esc(x.note||'')}</span><button class="btn btn-outline btn-sm" onclick="feeDelCol(${x.id})">🗑</button></div>`).join('')
+      + `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;"><input class="f-input" id="feeColAmt" placeholder="مبلغ حصّلناه للموكل" dir="ltr" style="width:170px;"><input type="date" class="f-input" id="feeColDate" value="${feeToday()}" style="width:150px;"><button class="btn btn-outline btn-sm" onclick="feeAddCol()">➕ تسجيل تحصيل</button></div>`;
+  }
+  if(c.schedule.length){
+    h += `<div style="font-weight:700;margin:14px 0 6px;">📅 جدول الدفعات</div><div class="table-wrap"><table><thead><tr><th>الدفعة</th><th>الاستحقاق</th><th>المبلغ</th><th>المسدد</th><th>الحالة</th><th></th></tr></thead><tbody>`
+      + c.schedule.map(s=>`<tr><td>${esc(s.label)}</td><td>${s.due_date?fd(s.due_date):'—'}</td><td>${money(s.amount)}</td><td>${money(s.paid_amount)}</td><td>${stLbl[s.status]}</td>
+        <td>${s.status!=='paid'?`<button class="btn btn-outline btn-sm" style="background:#25D366;color:#fff;border:none;" onclick="feeWA('inst',${s.id})">📲 مطالبة</button>`:''}</td></tr>`).join('')
+      + '</tbody></table></div>';
+    if(c.unscheduled>0) h += `<div style="font-size:12px;color:#b36b00;margin-top:6px;">⚠️ ${money(c.unscheduled)} من الأتعاب غير مجدولة في دفعات.</div>`;
+  }
+  h += `<div style="font-weight:700;margin:14px 0 6px;">💵 الدفعات المسددة</div>`
+    + (c.payments.length ? c.payments.map(p=>`<div style="display:flex;gap:8px;align-items:center;font-size:13px;padding:4px 0;border-bottom:1px solid #eee;"><span>${fd(p.paid_date)}</span><strong style="color:var(--green);">${money(p.amount)}</strong><span style="color:var(--txt3);flex:1;">${esc(p.note||'')}</span><button class="btn btn-outline btn-sm" onclick="feeDelPay(${p.id})">🗑</button></div>`).join('') : '<div style="color:var(--txt3);font-size:13px;">لا توجد دفعات بعد</div>')
+    + `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0;"><input class="f-input" id="feePayAmt" placeholder="المبلغ المدفوع" dir="ltr" inputmode="decimal" style="width:130px;"><input type="date" class="f-input" id="feePayDate" value="${feeToday()}" style="width:150px;"><input class="f-input" id="feePayNote" placeholder="ملاحظة (نقداً/كي نت…)" style="flex:1;min-width:130px;"><button class="btn btn-gold btn-sm" onclick="feeAddPay()">➕ تسجيل دفعة</button>${c.remaining>0?`<button class="btn btn-outline btn-sm" onclick="document.getElementById('feePayAmt').value='${c.remaining}'">المتبقي كامل</button>`:''}</div>`;
+  h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid #eee;">
+    <button class="btn btn-outline btn-sm" onclick="feeOpenForm(${c.id})">✏️ تعديل</button>
+    <button class="btn btn-outline btn-sm" onclick="feePrint([feeCur],feeCur.client_name)">🖨 كشف حساب</button>
+    ${c.remaining>0?`<button class="btn btn-outline btn-sm" style="background:#25D366;color:#fff;border:none;" onclick="feeWA('due')">📲 مطالبة ${c.late?'بالمتأخر':'بالمتبقي'}</button>`:''}
+    <button class="btn btn-outline btn-sm" style="background:#25D366;color:#fff;border:none;" onclick="feeWA('statement')">📲 إرسال كشف الحساب</button>
+    <span style="flex:1"></span><button class="btn btn-outline btn-sm" style="color:#c0392b;" onclick="feeDelete()">🗑 حذف العقد</button></div>`;
+  document.getElementById('feeDBody').innerHTML = h;
+}
+async function feeRefresh(){ if(!feeCur) return; const c = await api('GET','/api/fees/contracts/'+feeCur.id); if(c.error){ closeModal('feeDetailModal'); } else { feeCur=c; feeRenderDetail(); } feesLoad(); if(typeof crmCurrentData!=='undefined' && crmCurrentData && document.getElementById('crmDetailPane').style.display==='block') crmRenderFees(crmCurrentData); }
+async function feeAddPay(){
+  const amount = document.getElementById('feePayAmt').value.trim();
+  if(!amount){ toast('اكتب المبلغ',true); return; }
+  const d = await api('POST','/api/fees/contracts/'+feeCur.id+'/payments',{amount, paid_date:document.getElementById('feePayDate').value, note:document.getElementById('feePayNote').value});
+  if(d.error){ toast('⚠️ '+d.error,true); return; }
+  toast('✅ تم تسجيل الدفعة'); feeRefresh();
+}
+async function feeDelPay(id){ if(!confirm('حذف هذه الدفعة؟')) return; const d=await api('DELETE','/api/fees/payments/'+id); if(d.error){toast('⚠️ '+d.error,true);return;} feeRefresh(); }
+async function feeAddCol(){
+  const amount = document.getElementById('feeColAmt').value.trim(); if(!amount){ toast('اكتب المبلغ',true); return; }
+  const d = await api('POST','/api/fees/contracts/'+feeCur.id+'/collections',{amount, collected_date:document.getElementById('feeColDate').value});
+  if(d.error){ toast('⚠️ '+d.error,true); return; } feeRefresh();
+}
+async function feeDelCol(id){ if(!confirm('حذف هذا التحصيل؟')) return; await api('DELETE','/api/fees/collections/'+id); feeRefresh(); }
+async function feeDelete(){
+  if(!confirm('حذف العقد نهائياً مع كل دفعاته؟ لا يمكن التراجع.')) return;
+  const d = await api('DELETE','/api/fees/contracts/'+feeCur.id); if(d.error){ toast('⚠️ '+d.error,true); return; }
+  closeModal('feeDetailModal'); toast('✅ تم الحذف'); feesLoad(); if(typeof crmCurrentData!=='undefined' && crmCurrentData && document.getElementById('crmDetailPane').style.display==='block') crmRenderFees(crmCurrentData);
+}
+// ── نموذج العقد ──
+async function feeOpenForm(id, presetClientId){
+  await crmEnsureAll();
+  feeEditId = id || null;
+  let c = null; if(id){ c = feeCur && feeCur.id===id ? feeCur : await api('GET','/api/fees/contracts/'+id); closeModal('feeDetailModal'); }
+  const sel = document.getElementById('feeClient');
+  sel.innerHTML = '<option value="">— اختر الموكل —</option>'+crmAll.slice().sort((a,b)=>a.name.localeCompare(b.name,'ar')).map(x=>`<option value="${x.id}">${esc(x.name)}${x.client_type==='شركة'?' 🏢':''}</option>`).join('');
+  sel.value = c ? c.client_id : (presetClientId||''); sel.disabled = !!c;
+  document.getElementById('feeFormTitle').textContent = c ? '✏️ تعديل عقد الأتعاب' : '💰 عقد أتعاب جديد';
+  document.getElementById('feeTotal').value = c ? (c.total_fee||'') : '';
+  document.getElementById('feePct').value = c && c.collection_pct ? c.collection_pct : '';
+  document.getElementById('feeDate').value = c ? (c.contract_date||feeToday()) : feeToday();
+  document.getElementById('feeTitleIn').value = c ? (c.title||'') : '';
+  document.getElementById('feeNotes').value = c ? (c.notes||'') : '';
+  document.getElementById('feeGenDate').value = feeToday();
+  feeInst = c ? c.schedule.map(s=>({label:s.label,amount:s.amount,due_date:s.due_date||''})) : [];
+  await feeLoadCases(c ? c.cases.map(x=>x.id) : null);
+  feeInstRender(); openModal('feeFormModal');
+}
+async function feeClientChanged(){ await feeLoadCases(null); }
+async function feeLoadCases(selectedIds){
+  const cid = parseInt(document.getElementById('feeClient').value)||0; const box = document.getElementById('feeCases');
+  if(!cid){ box.innerHTML = '<span style="color:var(--txt3);">اختر الموكل أولاً</span>'; feeFormCases=[]; return; }
+  const d = await api('GET','/api/crm/clients/'+cid);
+  feeFormCases = [...(d.cases||[]), ...(d.sub_cases||[])];
+  box.innerHTML = feeFormCases.length ? feeFormCases.map(x=>`<label style="display:flex;gap:8px;align-items:center;padding:3px 0;cursor:pointer;"><input type="checkbox" class="feeCaseCb" value="${x.id}" ${(selectedIds?selectedIds.includes(x.id):x.status!=='منتهية')?'checked':''}> <strong>${esc(x.case_number)}</strong> <span style="color:var(--txt3);font-size:12px;">${esc(x.case_type||'')}${x.client_id!==cid?' — '+esc(x.client_name||''):''}${x.status==='منتهية'?' — منتهية':''}</span></label>`).join('')
+    : '<span style="color:var(--txt3);">لا توجد قضايا مربوطة بهذا الموكل. اربط القضايا به من «الموكلون» أولاً.</span>';
+}
+function feeInstRender(){
+  document.getElementById('feeInstRows').innerHTML = feeInst.map((x,i)=>`<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+    <input class="f-input" value="${esc(x.label)}" oninput="feeInst[${i}].label=this.value" placeholder="اسم الدفعة" style="flex:1;min-width:90px;">
+    <input class="f-input" value="${x.amount}" oninput="feeInst[${i}].amount=this.value;feeInstSummary()" inputmode="decimal" dir="ltr" placeholder="المبلغ" style="width:105px;">
+    <input type="date" class="f-input" value="${x.due_date||''}" oninput="feeInst[${i}].due_date=this.value" style="width:145px;">
+    <button class="btn btn-outline btn-sm" onclick="feeInst.splice(${i},1);feeInstRender()">✕</button></div>`).join('');
+  feeInstSummary();
+}
+function feeInstSummary(){
+  const total = Math.round((parseFloat(document.getElementById('feeTotal').value)||0)*1000);
+  const sum = feeInst.reduce((s,x)=>s+Math.round((parseFloat(x.amount)||0)*1000),0);
+  const el = document.getElementById('feeInstSum'); if(!el) return;
+  if(!feeInst.length){ el.innerHTML = '<span style="color:var(--txt3);">بدون دفعات مجدولة — تقدر تسجّل الدفعات يدوياً عند الاستلام.</span>'; return; }
+  const diff = total - sum;
+  el.innerHTML = `مجموع الدفعات: <strong>${money(sum/1000)}</strong> من ${money(total/1000)} — ` + (diff===0?'<span style="color:#1b7a3a;">✅ مطابق</span>':diff>0?`<span style="color:#b36b00;">غير موزّع ${money(diff/1000)}</span>`:`<span style="color:#c0392b;">⚠️ زيادة ${money(-diff/1000)}</span>`);
+}
+function feeAddInst(){ feeInst.push({label:'دفعة '+(feeInst.length+1),amount:'',due_date:''}); feeInstRender(); }
+function feeGenOne(){
+  const t = parseFloat(document.getElementById('feeTotal').value)||0; if(!t){ toast('اكتب إجمالي الأتعاب أولاً',true); return; }
+  feeInst = [{label:'الدفعة الكاملة',amount:t,due_date:document.getElementById('feeGenDate').value}]; feeInstRender();
+}
+function feeGenerate(){
+  const total = Math.round((parseFloat(document.getElementById('feeTotal').value)||0)*1000); if(!total){ toast('اكتب إجمالي الأتعاب أولاً',true); return; }
+  const advP = Math.min(100,Math.max(0,parseFloat(document.getElementById('feeGenAdv').value)||0));
+  const n = Math.max(0,parseInt(document.getElementById('feeGenN').value)||0);
+  const d0 = document.getElementById('feeGenDate').value || feeToday();
+  const adv = n===0 ? total : Math.round(total*advP/100); const rest = total-adv;
+  const rows = [{label:'المقدم',amount:adv/1000,due_date:d0}];
+  if(n>0 && rest>0){ const base = Math.floor(rest/n); for(let i=1;i<=n;i++){ const a = i===n ? rest-base*(n-1) : base; rows.push({label:'الدفعة '+(i+1),amount:a/1000,due_date:feeAddMonths(d0,i)}); } }
+  feeInst = rows; feeInstRender();
+}
+async function feeSave(){
+  const ids = [...document.querySelectorAll('.feeCaseCb:checked')].map(x=>parseInt(x.value));
+  const body = { client_id: parseInt(document.getElementById('feeClient').value)||0, case_ids: ids,
+    total_fee: document.getElementById('feeTotal').value.trim(), collection_pct: document.getElementById('feePct').value.trim(),
+    contract_date: document.getElementById('feeDate').value, title: document.getElementById('feeTitleIn').value.trim(), notes: document.getElementById('feeNotes').value.trim(),
+    installments: feeInst.filter(x=>String(x.amount).trim()!=='').map(x=>({label:x.label,amount:x.amount,due_date:x.due_date||null})) };
+  const btn = document.getElementById('feeSaveBtn'); btn.disabled = true;
+  try{
+    const d = feeEditId ? await api('PUT','/api/fees/contracts/'+feeEditId, body) : await api('POST','/api/fees/contracts', body);
+    if(d.error){ toast('⚠️ '+d.error,true); return; }
+    closeModal('feeFormModal'); toast('✅ تم حفظ العقد');
+    await feesLoad();
+    if(typeof crmCurrentData!=='undefined' && crmCurrentData && document.getElementById('crmDetailPane').style.display==='block') crmRenderFees(crmCurrentData);
+    feeOpen(feeEditId || d.id);
+  } finally { btn.disabled = false; }
+}
+// ── واتساب ──
+function feeOffice(){ return (officeSettings.office_name && officeSettings.office_name.value) || 'المقام للمحاماة'; }
+function feeMsg(c, kind, instId){
+  const casesTxt = c.cases.map(x=>x.case_number).join('، ');
+  const head = `السلام عليكم ورحمة الله،\nالسيد/ة ${c.client_name} المحترم/ة،\n\n`;
+  const tail = `\n\nنرجو التكرم بالسداد، وشاكرين تعاونكم.\n${feeOffice()}`;
+  if(kind==='inst'){
+    const s = c.schedule.find(x=>x.id===instId);
+    return head + `نذكّركم بموعد ${s.label} من أتعاب القضايا (${casesTxt}):\n💰 المبلغ: ${money(s.unpaid)}\n📅 الاستحقاق: ${s.due_date?fd(s.due_date):'—'}${s.status==='overdue'?' (متأخرة)':''}\n\nإجمالي المتبقي من الأتعاب: ${money(c.remaining)}` + tail;
+  }
+  if(kind==='due'){
+    return head + (c.late
+      ? `نفيدكم بوجود مبلغ مستحق السداد من أتعاب القضايا (${casesTxt}):\n💰 المستحق الآن: ${money(c.due_now)}\n📌 إجمالي المتبقي: ${money(c.remaining)}`
+      : `نفيدكم بالمتبقي من أتعاب القضايا (${casesTxt}):\n📌 المتبقي: ${money(c.remaining)}${c.next_due?`\n📅 الدفعة القادمة: ${money(c.next_due.amount)} بتاريخ ${fd(c.next_due.due_date)}`:''}`) + tail;
+  }
+  return head + `كشف حساب الأتعاب — القضايا (${casesTxt}):\n\n📄 إجمالي المستحق: ${money(c.due_total)}\n✅ المدفوع: ${money(c.paid)}\n📌 المتبقي: ${c.complete?'0.000 د.ك — اكتمل السداد، شكراً لكم':money(c.remaining)}`
+    + (c.payments.length ? '\n\nالدفعات المسددة:\n'+c.payments.map(p=>`• ${fd(p.paid_date)}: ${money(p.amount)}`).join('\n') : '')
+    + (c.late ? `\n\n🔔 مبلغ متأخر: ${money(c.due_now)}` : '') + `\n\n${feeOffice()}`;
+}
+function feeWA(kind, instId){
+  const c = feeCur; const ph = waPhone(c.client_phone);
+  const msg = feeMsg(c, kind, instId);
+  if(!ph){ try{ navigator.clipboard.writeText(msg); }catch(e){} toast('📋 ما فيه رقم هاتف للموكل — تم نسخ الرسالة. سجّل رقمه من صفحة الموكل.',true); return; }
+  window.open('https://wa.me/'+ph+'?text='+encodeURIComponent(msg),'_blank');
+}
+// ── طباعة كشف الحساب ──
+function feePrint(list, title){
+  if(!list.length){ toast('لا توجد عقود',true); return; }
+  const w = window.open('','_blank'); if(!w){ toast('المتصفح منع النافذة — اسمح بالنوافذ المنبثقة',true); return; }
+  const m = n=>Number(n||0).toLocaleString('en-US',{minimumFractionDigits:3,maximumFractionDigits:3});
+  const st = {paid:'مسددة',overdue:'متأخرة',upcoming:'قادمة'};
+  const tot = k=>list.reduce((s,c)=>s+Math.round(c[k]*1000),0)/1000;
+  const body = list.map(c=>`<div class="ct"><h3>${esc(c.client_name)} — القضايا: ${c.cases.map(x=>esc(x.case_number)).join('، ')}</h3>
+    <table><tr><th>الدفعة</th><th>الاستحقاق</th><th>المبلغ</th><th>المسدد</th><th>الحالة</th></tr>
+    ${c.schedule.map(s=>`<tr><td>${esc(s.label)}</td><td>${s.due_date?fd(s.due_date):'—'}</td><td>${m(s.amount)}</td><td>${m(s.paid_amount)}</td><td>${st[s.status]}</td></tr>`).join('') || '<tr><td colspan="5">بدون جدول دفعات</td></tr>'}</table>
+    ${c.collection_pct>0?`<p>نسبة التحصيل ${c.collection_pct}% — المحصّل ${m(c.collected)} ← ${m(c.pct_fee)} د.ك</p>`:''}
+    ${c.payments.length?`<table><tr><th>تاريخ الدفعة</th><th>المبلغ</th><th>ملاحظة</th></tr>${c.payments.map(p=>`<tr><td>${fd(p.paid_date)}</td><td>${m(p.amount)}</td><td>${esc(p.note||'')}</td></tr>`).join('')}</table>`:''}
+    <p class="sum">المستحق: <b>${m(c.due_total)}</b> &nbsp; المدفوع: <b>${m(c.paid)}</b> &nbsp; المتبقي: <b>${m(c.remaining)}</b> ${c.complete?' — ✅ اكتمل السداد':''}</p></div>`).join('');
+  w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>كشف حساب — ${esc(title)}</title><style>
+    body{font-family:Tahoma,Arial,sans-serif;margin:28px;color:#1b2a41;font-size:13px}h1{margin:0;font-size:20px}h2{margin:4px 0 14px;font-size:15px;color:#555;font-weight:400}
+    h3{font-size:14px;margin:18px 0 6px;background:#f2efe6;padding:6px 10px;border-radius:6px}table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #ccc;padding:6px 8px;text-align:right}th{background:#f7f5ef}
+    .sum{font-size:14px}.tot{margin-top:20px;border-top:2px solid #1b2a41;padding-top:10px;font-size:15px}.ct{page-break-inside:avoid}.ft{margin-top:30px;font-size:11px;color:#777}</style></head><body>
+    <h1>${esc(feeOffice())}</h1><h2>كشف حساب الأتعاب — ${esc(title)} — بتاريخ ${fd(feeToday())}</h2>${body}
+    <div class="tot">الإجمالي: ${m(tot('due_total'))} د.ك &nbsp;|&nbsp; المدفوع: ${m(tot('paid'))} د.ك &nbsp;|&nbsp; <b>المتبقي: ${m(tot('remaining'))} د.ك</b></div>
+    <div class="ft">المبالغ بالدينار الكويتي.</div></body></html>`);
+  w.document.close(); w.focus(); setTimeout(()=>w.print(),400);
+}
+// ── بطاقة الأتعاب في صفحة الموكل ──
+async function crmRenderFees(d){
+  const card = document.getElementById('crmFeesCard'); if(!card) return;
+  if(!crmIsAdmin()){ card.style.display='none'; return; }
+  card.style.display='';
+  const c = d.client; const list = await api('GET','/api/fees/contracts?client_id='+c.id);
+  const arr = Array.isArray(list) ? list : []; window._crmFeeList = arr;
+  const own = arr.filter(x=>x.client_id===c.id);
+  let h = arr.length ? arr.map(x=>`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid #eee;cursor:pointer;" onclick="feeOpen(${x.id})">
+      <div style="flex:1;min-width:160px;"><strong>${x.client_id!==c.id?esc(x.client_name)+' — ':''}${x.cases.map(y=>esc(y.case_number)).join('، ')}</strong><div style="font-size:12px;color:var(--txt3);">إجمالي ${x.waiting_collection?'نسبة '+x.collection_pct+'%':money(x.due_total)} — مدفوع ${money(x.paid)} — متبقي ${money(x.remaining)}</div></div>${feeStatus(x)}</div>`).join('')
+    : '<div style="color:var(--txt3);font-size:13px;">لا توجد عقود أتعاب لهذا الموكل.</div>';
+  h += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;"><button class="btn btn-gold btn-sm" onclick="feeOpenForm(null,${c.id})">➕ عقد أتعاب جديد</button>`
+    + (arr.length?`<button class="btn btn-outline btn-sm" onclick="feePrint(window._crmFeeList,crmCurrentData.client.name)">🖨 كشف حساب الموكل</button>`:'')+`</div>`;
+  document.getElementById('crmFeesBody').innerHTML = h;
+}
+
 // ── حساب البوابة المربوط بسجل الموكل ──
 function crmRenderPortal(d){
   const card = document.getElementById('crmPortalCard');
@@ -5967,7 +6276,7 @@ function crmRenderPortal(d){
 }
 async function crmPortalCreate(confirmAnother){
   const c = crmCurrentData.client;
-  const ph = (c.phone||'').replace(/\D/g,'');
+  const ph = waPhone(c.phone);
   // نفتح نافذة الواتساب فوراً (قبل انتظار السيرفر) حتى لا يمنعها المتصفح
   let w = null; if(ph && !confirmAnother){ try{ w = window.open('about:blank','_blank'); }catch(e){} }
   const d = await api('POST','/api/crm/clients/'+c.id+'/portal-account', confirmAnother?{confirm_another:true}:{});
@@ -5980,7 +6289,7 @@ async function crmPortalCreate(confirmAnother){
 }
 async function crmPortalReset(uid, username){
   if(!confirm('توليد رقم سري جديد؟ الرقم القديم يتوقف.')) return;
-  const ph = (crmCurrentData.client.phone||'').replace(/\D/g,'');
+  const ph = waPhone(crmCurrentData.client.phone);
   let w = null; if(ph){ try{ w = window.open('about:blank','_blank'); }catch(e){} }
   const d = await api('PUT','/api/client-accounts/'+uid+'/reset-pin');
   if(d.error){ if(w) w.close(); toast('⚠️ '+d.error,true); return; }
@@ -6285,7 +6594,7 @@ async function crmConsolApply(){
 }
 
 function showView(v,el,isBack){
-  if(currentUser.role!=='admin' && ['users','employees','settings','finance'].includes(v)){
+  if(currentUser.role!=='admin' && ['users','employees','settings','finance','fees'].includes(v)){
     toast('⚠️ ما عندك صلاحية بهذا القسم',true);
     v = 'dash'; el = document.querySelector('.nav-item[onclick*="showView(\'dash\'"]');
   }
@@ -6309,6 +6618,7 @@ function showView(v,el,isBack){
   if(v==='auditlog') renderAuditLog();
   if(v==='procs') loadCalTasks();
   if(v==='finance') loadFinance();
+  if(v==='fees') feesLoad();
   if(v==='crm') crmLoad();
   if(v==='dash' && currentUser.role==='admin') renderOnlineBox();
   if(v==='decisions'){
