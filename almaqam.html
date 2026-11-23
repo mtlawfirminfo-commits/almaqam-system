@@ -695,6 +695,7 @@ tr.st-done{border-right-color:var(--txt3) !important;opacity:.7;}
           <option value="done">مكتملة السداد</option>
           <option value="wait">بانتظار تحصيل (نسبة)</option>
         </select>
+        <button class="btn btn-outline" onclick="feeOpenReport()">📊 تقرير الإيرادات والمستحق</button>
         <button class="btn btn-gold" onclick="feeOpenForm()">➕ عقد أتعاب جديد</button>
       </div>
       <div class="card"><div class="table-wrap"><table>
@@ -1670,6 +1671,21 @@ tr.st-done{border-right-color:var(--txt3) !important;opacity:.7;}
 </div>
 
 <!-- ═══ CRM: CLIENT FORM MODAL ═══ -->
+<div class="modal-overlay" id="feeReportModal">
+  <div class="modal" style="max-width:900px;">
+    <div class="modal-header"><div class="modal-title">📊 تقرير الأتعاب</div><button class="modal-close" onclick="closeModal('feeReportModal')">✕</button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:12px;">
+        <div><div style="font-size:12px;">الفترة</div><select class="f-select" id="feeRepPreset" onchange="feeRepPreset()"><option value="month">هذا الشهر</option><option value="last">الشهر الماضي</option><option value="year">هذه السنة</option><option value="all">كل الفترات</option><option value="custom">فترة محددة</option></select></div>
+        <div><div style="font-size:12px;">من</div><input type="date" class="f-input" id="feeRepFrom" onchange="document.getElementById('feeRepPreset').value='custom'"></div>
+        <div><div style="font-size:12px;">إلى</div><input type="date" class="f-input" id="feeRepTo" onchange="document.getElementById('feeRepPreset').value='custom'"></div>
+        <button class="btn btn-gold btn-sm" onclick="feeRepLoad()">عرض</button>
+        <button class="btn btn-outline btn-sm" onclick="feeRepPrint()">🖨 طباعة</button>
+      </div>
+      <div id="feeRepBody"></div>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="feeFormModal">
   <div class="modal" style="max-width:760px;">
     <div class="modal-header"><div class="modal-title" id="feeFormTitle">💰 عقد أتعاب جديد</div><button class="modal-close" onclick="closeModal('feeFormModal')">✕</button></div>
@@ -6240,6 +6256,44 @@ function feePrint(list, title){
     <h1>${esc(feeOffice())}</h1><h2>كشف حساب الأتعاب — ${esc(title)} — بتاريخ ${fd(feeToday())}</h2>${body}
     <div class="tot">الإجمالي: ${m(tot('due_total'))} د.ك &nbsp;|&nbsp; المدفوع: ${m(tot('paid'))} د.ك &nbsp;|&nbsp; <b>المتبقي: ${m(tot('remaining'))} د.ك</b></div>
     <div class="ft">المبالغ بالدينار الكويتي.</div></body></html>`);
+  w.document.close(); w.focus(); setTimeout(()=>w.print(),400);
+}
+// ── تقرير الإيرادات والمستحق ──
+let feeRep = null;
+function feeRepPreset(){
+  const p = document.getElementById('feeRepPreset').value; const t = feeToday(); const y = +t.slice(0,4), m = +t.slice(5,7);
+  const pad = n=>String(n).padStart(2,'0'); const last = (yy,mm)=>new Date(Date.UTC(yy,mm,0)).getUTCDate();
+  let f='', to='';
+  if(p==='month'){ f=`${y}-${pad(m)}-01`; to=`${y}-${pad(m)}-${last(y,m)}`; }
+  else if(p==='last'){ const pm = m===1?12:m-1, py = m===1?y-1:y; f=`${py}-${pad(pm)}-01`; to=`${py}-${pad(pm)}-${last(py,pm)}`; }
+  else if(p==='year'){ f=`${y}-01-01`; to=`${y}-12-31`; }
+  if(p!=='custom'){ document.getElementById('feeRepFrom').value=f; document.getElementById('feeRepTo').value=to; feeRepLoad(); }
+}
+function feeOpenReport(){ openModal('feeReportModal'); document.getElementById('feeRepPreset').value='month'; feeRepPreset(); }
+async function feeRepLoad(){
+  const f = document.getElementById('feeRepFrom').value, t = document.getElementById('feeRepTo').value;
+  const d = await api('GET','/api/fees/report?from='+f+'&to='+t);
+  if(d.error){ toast('⚠️ '+d.error,true); return; }
+  feeRep = d; feeRepRender();
+}
+function feeRepMonthName(m){ const [y,mm]=m.split('-'); return new Date(Date.UTC(+y,+mm-1,1)).toLocaleDateString('ar-KW',{month:'long',year:'numeric',timeZone:'UTC'}); }
+function feeRepHtml(d){
+  const per = d.from||d.to ? `من ${d.from?fd(d.from):'—'} إلى ${d.to?fd(d.to):'—'}` : 'كل الفترات';
+  const box = (l,v,c)=>`<div style="flex:1;min-width:150px;background:#faf8f3;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:11px;color:#777;">${l}</div><div style="font-size:19px;font-weight:800;${c?'color:'+c:''}">${v}</div></div>`;
+  return `<div style="font-size:12px;color:#777;margin-bottom:8px;">${per}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">${box('💰 الإيرادات المستلمة',money(d.received_total),'#1b7a3a')}${box('📌 المستحق على الموكلين',money(d.receivables_total),'#b36b00')}${box('🔔 منه متأخر',money(d.late_total),d.late_total>0?'#c0392b':'')}</div>
+    <div style="font-weight:700;margin:10px 0 6px;">📅 الإيرادات حسب الشهر</div>
+    ${d.months.length?`<table style="width:100%;border-collapse:collapse;"><tbody>${d.months.map(m=>`<tr><td style="padding:5px 8px;border-bottom:1px solid #eee;">${feeRepMonthName(m.month)}</td><td style="padding:5px 8px;border-bottom:1px solid #eee;"><strong>${money(m.total)}</strong></td></tr>`).join('')}</tbody></table>`:'<div style="color:#999;font-size:13px;">لا توجد دفعات في هذه الفترة</div>'}
+    <div style="font-weight:700;margin:16px 0 6px;">💵 الدفعات المستلمة (${d.payments_count})</div>
+    ${d.payments.length?`<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f7f5ef;"><th style="padding:6px;text-align:right;">التاريخ</th><th style="text-align:right;">الموكل</th><th style="text-align:right;">القضايا</th><th style="text-align:right;">المبلغ</th></tr></thead><tbody>${d.payments.map(p=>`<tr><td style="padding:5px 6px;border-bottom:1px solid #eee;">${fd(p.paid_date)}</td><td style="border-bottom:1px solid #eee;">${esc(p.client_name)}</td><td style="border-bottom:1px solid #eee;font-size:12px;">${p.cases.map(esc).join('، ')}</td><td style="border-bottom:1px solid #eee;"><strong>${money(p.amount)}</strong></td></tr>`).join('')}</tbody></table>`:'<div style="color:#999;font-size:13px;">—</div>'}
+    <div style="font-weight:700;margin:16px 0 6px;">📌 المستحق على الموكلين (حتى اليوم ${fd(d.today)})</div>
+    ${d.receivables.length?`<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="background:#f7f5ef;"><th style="padding:6px;text-align:right;">الموكل</th><th style="text-align:right;">القضايا</th><th style="text-align:right;">الإجمالي</th><th style="text-align:right;">المدفوع</th><th style="text-align:right;">المتبقي</th><th style="text-align:right;">متأخر</th></tr></thead><tbody>${d.receivables.map(r=>`<tr><td style="padding:5px 6px;border-bottom:1px solid #eee;">${esc(r.client_name)}</td><td style="border-bottom:1px solid #eee;font-size:12px;">${r.cases.map(esc).join('، ')}</td><td style="border-bottom:1px solid #eee;">${money(r.due_total)}</td><td style="border-bottom:1px solid #eee;">${money(r.paid)}</td><td style="border-bottom:1px solid #eee;"><strong>${money(r.remaining)}</strong></td><td style="border-bottom:1px solid #eee;color:#c0392b;">${r.due_now>0?money(r.due_now):'—'}</td></tr>`).join('')}</tbody></table>`:'<div style="color:#999;font-size:13px;">لا يوجد مستحق 🎉</div>'}`;
+}
+function feeRepRender(){ document.getElementById('feeRepBody').innerHTML = feeRepHtml(feeRep); }
+function feeRepPrint(){
+  if(!feeRep){ toast('اعرض التقرير أولاً',true); return; }
+  const w = window.open('','_blank'); if(!w){ toast('المتصفح منع النافذة — اسمح بالنوافذ المنبثقة',true); return; }
+  w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>تقرير الأتعاب</title><style>body{font-family:Tahoma,Arial,sans-serif;margin:28px;color:#1b2a41;font-size:13px}h1{margin:0;font-size:20px}table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #ccc;padding:6px 8px;text-align:right}</style></head><body><h1>${esc(feeOffice())}</h1><div style="margin:4px 0 14px;color:#555;">تقرير الأتعاب — بتاريخ ${fd(feeToday())}</div>${feeRepHtml(feeRep)}</body></html>`);
   w.document.close(); w.focus(); setTimeout(()=>w.print(),400);
 }
 // ── بطاقة الأتعاب في صفحة الموكل ──

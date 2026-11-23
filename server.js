@@ -2732,6 +2732,29 @@ app.get('/api/fees/alerts', auth, adminOnly, async (req, res) => {
       oldest: (c.schedule.find(s => s.status === 'overdue') || {}).due_date || null })));
   } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر التحميل' }); }
 });
+// تقرير الأتعاب: الإيرادات المستلمة في فترة + المستحق على الموكلين
+app.get('/api/fees/report', auth, adminOnly, async (req, res) => {
+  try {
+    const today = localToday();
+    const ok = d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+    const from = ok(req.query.from) ? req.query.from : null, to = ok(req.query.to) ? req.query.to : null;
+    const all = await loadFeeContracts();
+    const pays = [];
+    for (const c of all) for (const p of c.payments) {
+      if ((from && p.paid_date < from) || (to && p.paid_date > to)) continue;
+      pays.push({ id: p.id, paid_date: p.paid_date, amount: p.amount, note: p.note, contract_id: c.id, client_name: c.client_name, cases: c.cases.map(x => x.case_number) });
+    }
+    pays.sort((a, b) => (a.paid_date < b.paid_date ? 1 : a.paid_date > b.paid_date ? -1 : b.id - a.id));
+    const byMonth = {};
+    let totalF = 0;
+    for (const p of pays) { const m = p.paid_date.slice(0, 7); byMonth[m] = (byMonth[m] || 0) + fils(p.amount); totalF += fils(p.amount); }
+    const months = Object.keys(byMonth).sort().map(m => ({ month: m, total: kd(byMonth[m]) }));
+    const recv = all.filter(c => c.remaining > 0).map(c => ({ id: c.id, client_name: c.client_name, cases: c.cases.map(x => x.case_number), due_total: c.due_total, paid: c.paid, remaining: c.remaining, due_now: c.due_now, late: c.late, next_due: c.next_due }))
+      .sort((a, b) => b.remaining - a.remaining);
+    res.json({ from, to, today, received_total: kd(totalF), payments_count: pays.length, months, payments: pays,
+      receivables_total: kd(recv.reduce((s, x) => s + fils(x.remaining), 0)), late_total: kd(recv.reduce((s, x) => s + fils(x.due_now), 0)), receivables: recv });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'تعذر إنشاء التقرير' }); }
+});
 // عقود الموكل الظاهرة لحساب البوابة (نفس منطق ظهور القضايا)
 app.get('/api/client-portal/fees', auth, async (req, res) => {
   try {
